@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ph.mapper.NewsDetailMapper">
+    <select id="queryAll" resultType="com.ph.pojo.NewsDetail">
+         select id,title,summary,author,createdate as date from news_detail order by date asc;
+    </select>
+    <select id="queryByTitle" resultType="com.ph.pojo.NewsDetail">
+         select id,title,summary,author,createdate as date from news_detail
+          <where>
+              <if test="title != null">
+                  title like concat('%',#{title},'%')
+              </if>
+          </where>
+          order by date asc;
+    </select>
+    <delete id="deleteNewsById" >
+        delete from news_detail where id=#{newsId};
+    </delete>
+</mapper>
