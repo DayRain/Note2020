@@ -117,6 +117,16 @@ send  内容
 
 # 二、NIO
 
+## 0、参考
+
+参考博客：
+
+NIO参考链接：https://blog.csdn.net/u011381576/article/details/79876754
+
+&0xFF  : https://blog.csdn.net/i6223671/article/details/88924481
+
+​               https://www.cnblogs.com/think-in-java/p/5527389.html
+
 ## 1、概述
 
 NIO，同步非阻塞io，也被称为new io。
@@ -134,6 +144,25 @@ NIO是面向缓冲区，或者面向块编程的。数据读取到一个它稍�
 HTTP2.0使用了多路复用的技术，做到同一个连接并发处理多个请求，而且并发请求的数量比Http1.1大了好几个数量级。
 
 ## 2、Buffer
+
+### 2.1 Buffer概念
+
+NIO中的Buffer是一个缓冲区，Channel从文件或者网络读取或者写数据时，都必须经过Buffer
+
+
+
+Buffer类中几个变量的含义
+
+```
+    private int mark = -1;     //记录当前position的前一个位置
+    private int position = 0;  //下一个要操作的数据元素的位置
+    private int limit;     //缓冲区中不可操作的下一个元素的位置， limit <= capacity
+    private int capacity;  //缓冲数组的总长度	
+```
+
+
+
+### 2.2 简单Demo
 
 ```
 public class BasicBuffer {
@@ -156,6 +185,81 @@ public class BasicBuffer {
     }
 }
 ```
+
+### 2.3 Byte数组为什么要转化成16进制字符串
+
+```
+Charset.forName("UTF-8").newDecoder().decode(buffer).toString();
+```
+
+通过上述代码来解码时，可能会出现乱码问题，转化成16进制字符串是一种比较通用的做法。
+
+```
+byte[]bytes = new byte[buffer.remaining()];
+buffer.get(bytes, 0, bytes.length);
+//byte[]转换为hexstring
+receivedString= ByteUtil.bytesToHexString(bytes);
+
+public static String bytesToHexString(byte[] src){
+
+    StringBuilder stringBuilder = new StringBuilder("");
+    if (src == null || src.length <= 0) {
+        return null;
+    }
+    for (int i = 0; i < src.length; i++) {
+        //将高八位置为0
+        int v = src[i] & 0xFF;
+        String hv = Integer.toHexString(v);
+        //如果长度小于2，要先补一个零
+        if (hv.length() < 2) {
+            stringBuilder.append(0);
+        }
+        stringBuilder.append(hv);
+    }
+    
+    return stringBuilder.toString();
+}
+
+```
+
+
+
+```
+src[i] & 0xFF           表示取低八位
+
+( src[i] >>8 ) & 0xFF    表示取高八位
+```
+
+### 2.4 &0xFF的作用
+
+前置知识， java中是没有无符号类型的，包括byte，都有正负之分。
+
+show code：
+
+```
+public class ByteTest {
+    public static void main(String[] args) {
+        byte a = -127;
+        int b = a;
+        System.out.println(b);
+        int c = a &0xff;
+        System.out.println(c);
+    }
+}
+```
+
+结果：
+
+```
+-127
+129
+```
+
+b是直接赋值，因为a是负数，高位补1，b也是负数。保证了十进制数值上的不变。（高位补1）
+
+c间接赋值，与0xFF做与运算，高位置0，低位不变。保证了二进制的不变。（高位补0）
+
+
 
 ## 3、NIO和BIO的比较
 
