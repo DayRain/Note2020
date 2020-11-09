@@ -1,4 +1,19 @@
-# 一、入门案例
+# 一、概述
+
+## 1、Netty核心组件
+
+- Channel
+- 回调
+- Future
+- 事件和ChannelHandler
+
+Netty的每一个出站I/O操作都将返回一个ChannelFuture；都不会阻塞，所以说Netty完全是异步和事件驱动的。
+
+将事件派发给不同的ChannelHandler进行处理。
+
+Netty通过触发事件将Selector从应用程序中抽象出来，消除了所有本来就需要手动编写的派发代码，在内部，为每个Channel分配一个EventLoop，用来处理时间。主要功能为1、注册感兴趣的事件 2、将事件派发给ChannelHandler 3、安排进一步的动作
+
+# 二、入门案例
 
 ## 1、server端
 
@@ -72,7 +87,6 @@ public class NettyServerHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
         ctx.writeAndFlush(Unpooled.copiedBuffer("hello,客户端", CharsetUtil.UTF_8));
-
     }
 
     @Override
@@ -149,7 +163,7 @@ public class NettyClientHandler extends ChannelInboundHandlerAdapter {
 }
 ```
 
-# 二、任务
+# 三、任务
 
 ## 1、自定义普通任务
 
@@ -250,7 +264,7 @@ public class NettyServerHandler extends ChannelInboundHandlerAdapter {
 
 ```
 
-# 三、异步模型
+# 四、异步模型
 
 ## 1、简述
 
@@ -278,7 +292,7 @@ Netty的异步模型是建立在future和callback之上的。callback就是回�
            });
 ```
 
-# 四、http服务实例
+# 五、http服务实例
 
 ## 1、server端
 
@@ -387,7 +401,7 @@ public class TestHttpServerHandler extends SimpleChannelInboundHandler<HttpObjec
 
 ```
 
-# 五、群聊
+# 六、群聊
 
 ```
 public class GroupChatServer {
@@ -567,6 +581,303 @@ public class GroupChatClientHandler extends SimpleChannelInboundHandler<String> 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, String msg) throws Exception {
         System.out.println(msg.trim());
+    }
+}
+
+```
+
+# 七、第二次笔记补充
+
+## 7.1 demo
+
+### server端
+
+handler
+
+```
+@ChannelHandler.Sharable
+public class EchoServerHandler extends ChannelInboundHandlerAdapter {
+
+    @Override
+    public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+        ByteBuf in = (ByteBuf) msg;
+        System.out.println("Server received: " + in.toString(CharsetUtil.UTF_8));
+
+        //将收到的消息发送给发送者，而不冲刷出站消息。
+        ctx.write(in);
+        // ctx.writeAndFlush(in);
+    }
+
+    @Override
+    public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
+        ctx.writeAndFlush(Unpooled.EMPTY_BUFFER)           //
+                 .addListener(ChannelFutureListener.CLOSE);  //将未决消息冲刷到远程节点，并关闭Channel
+    }
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+        super.exceptionCaught(ctx, cause);
+        cause.printStackTrace();
+        ctx.close();
+    }
+
+}
+```
+
+服务启动类
+
+```
+public class EchoServer {
+
+    private final int port;
+
+    public EchoServer(int port){
+        this.port = port;
+    }
+
+    public static void main(String[] args) throws InterruptedException {
+        int port = 8888;
+        new EchoServer(port).start();
+    }
+
+    private void start() throws InterruptedException {
+        final EchoServerHandler serverHandler = new EchoServerHandler();
+        EventLoopGroup group = new NioEventLoopGroup();
+        try {
+            ServerBootstrap b = new ServerBootstrap();
+            b.group(group)
+                    .channel(NioServerSocketChannel.class)
+                    .localAddress(new InetSocketAddress(port))
+                    .childHandler(new ChannelInitializer< SocketChannel>()  {
+                        @Override
+                        protected void initChannel(SocketChannel socketChannel) throws Exception {
+                            socketChannel.pipeline().addLast(serverHandler);
+                        }
+
+                    });
+            //异步地绑定服务器；调用sync()方法阻塞等待直到绑定完成
+            ChannelFuture channelFuture = b.bind().sync();
+            //获取Channel的closeFuture，并且阻塞当前线程直到它完成
+            channelFuture.channel().closeFuture().sync();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }finally {
+            group.shutdownGracefully().sync();
+        }
+    }
+}
+```
+
+### client端
+
+handler类
+
+```
+@ChannelHandler.Sharable
+public class EchoClientHandler extends SimpleChannelInboundHandler<ByteBuf> {
+
+    @Override
+    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+        ctx.writeAndFlush(Unpooled.copiedBuffer("Netty rocks!", CharsetUtil.UTF_8));
+    }
+
+    @Override
+    protected void channelRead0(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf) throws Exception {
+        System.out.println("Client received: " + byteBuf.toString(CharsetUtil.UTF_8));
+    }
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+        cause.printStackTrace();
+        ctx.close();
+    }
+}
+
+```
+
+client类
+
+```
+public class EchoClient {
+
+    private final String host;
+    private final int port;
+
+    public EchoClient(String host, int port) {
+        this.host = host;
+        this.port = port;
+    }
+    public void start() throws InterruptedException {
+        EventLoopGroup group = new NioEventLoopGroup();
+        try{
+            Bootstrap b = new Bootstrap();
+            b.group(group)
+                    .channel(NioSocketChannel.class)
+                    .remoteAddress(new InetSocketAddress(host, port))
+                    .handler(new ChannelInitializer<SocketChannel>() {
+                        @Override
+                        protected void initChannel(SocketChannel socketChannel) throws Exception {
+                            socketChannel.pipeline().addLast(new EchoClientHandler());
+                        }
+                    });
+            ChannelFuture f = b.connect().sync();
+            Channel channel = f.channel();
+            while (true){
+                Scanner scanner = new Scanner(System.in);
+                String s = scanner.nextLine();
+                if("exit".equals(s)){
+                    channel.writeAndFlush(Unpooled.copiedBuffer(s, CharsetUtil.UTF_8)).addListener(ChannelFutureListener.CLOSE);
+                    break;
+                }
+                channel.writeAndFlush(Unpooled.copiedBuffer(s, CharsetUtil.UTF_8));
+            }
+            //会等待服务器关闭ci
+            f.channel().closeFuture().sync();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        } finally {
+            group.shutdownGracefully().sync();
+        }
+
+    }
+
+    public static void main(String[] args) throws InterruptedException {
+        String ip = "192.168.1.207";
+        int host = 8888;
+        new EchoClient(ip, host).start();
+    }
+}
+```
+
+## 7.2 ChannelHandler-Context
+
+​       代表了ChannelHandler和ChannelPipeline之间的绑定。虽然这个对象可以被用于获取底层的channel，但主要还是被用于写出站数据。
+
+​         Netty中发送消息的两种方式：
+
+- 直接写到Channel中
+
+会使消息从Channel-Pipeline的尾端开始流动
+
+- 写到ChannelHandlerContext对象中
+
+消息将从ChannelPipeline中的下一个Channel-Handler开始流动
+
+## 7.3 EventLoopGroup
+
+客户端（BootStrap）只需要一个EventLoopGroup，
+
+服务器（ServerBootStrap）需要两个EventLoopGroup。一个代表自身绑定到某个端口正在监听的套接字。第二组包含所有已创建的用来处理客户端连接的channel。
+
+服务器端，有的测试demo  add了两个个group，有的测试demo只 add了一个group，但实际上此时是共用一个group。
+
+## 7.4 心跳
+
+
+
+
+
+```
+@ChannelHandler.Sharable
+public class EchoServerHandler extends ChannelInboundHandlerAdapter {
+
+    private static final SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+
+    private static final ByteBuf heartbeat_sequence = Unpooled.unreleasableBuffer(Unpooled.copiedBuffer("heart beat sequence", CharsetUtil.UTF_8));
+    @Override
+    public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+        ByteBuf in = (ByteBuf) msg;
+        System.out.println("Server received: " + in.toString(CharsetUtil.UTF_8));
+
+        //将收到的消息发送给发送者，而不冲刷出站消息。
+        ctx.write(in);
+        // ctx.writeAndFlush(in);
+    }
+
+    @Override
+    public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
+        //将未决消息冲刷到远程节点，并关闭Channel
+        // ctx.writeAndFlush(Unpooled.EMPTY_BUFFER)
+        //          .addListener(ChannelFutureListener.CLOSE);
+        ctx.writeAndFlush(Unpooled.EMPTY_BUFFER)
+                .addListener(new ChannelFutureListener() {
+                    @Override
+                    public void operationComplete(ChannelFuture channelFuture) throws Exception {
+                        if(channelFuture.isSuccess()){
+                            System.out.println("success");
+                        }else{
+                            System.out.println("error");
+                        }
+                    }
+                });
+    }
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+        super.exceptionCaught(ctx, cause);
+        cause.printStackTrace();
+        ctx.close();
+    }
+
+    @Override
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+        if(evt instanceof IdleStateEvent) {
+            System.out.println(simpleDateFormat.format(new Date())+"触发了");
+            //失败的时候关闭
+            ctx.writeAndFlush(heartbeat_sequence.duplicate()).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
+        }else {
+            //不是心跳事件，继续传递
+            super.userEventTriggered(ctx, evt);
+        }
+    }
+
+}
+```
+
+
+
+
+
+```
+public class EchoServer {
+
+    private final int port;
+
+    public EchoServer(int port){
+        this.port = port;
+    }
+
+    public static void main(String[] args) throws InterruptedException {
+        int port = 8888;
+        new EchoServer(port).start();
+    }
+
+    private void start() throws InterruptedException {
+        final EchoServerHandler serverHandler = new EchoServerHandler();
+        EventLoopGroup group = new NioEventLoopGroup();
+        try {
+            ServerBootstrap b = new ServerBootstrap();
+            b.group(group)
+                    .channel(NioServerSocketChannel.class)
+                    .localAddress(new InetSocketAddress(port))
+                    .childHandler(new ChannelInitializer< SocketChannel>()  {
+                        @Override
+                        protected void initChannel(SocketChannel socketChannel) throws Exception {
+                            ChannelPipeline pipeline = socketChannel.pipeline();
+
+                            pipeline.addLast(new IdleStateHandler(5, 0, 0, TimeUnit.SECONDS)); //被触发的时候发送（60秒内）
+                            pipeline.addLast(serverHandler);
+                        }
+                    });
+            //异步地绑定服务器；调用sync()方法阻塞等待直到绑定完成
+            ChannelFuture channelFuture = b.bind().sync();
+            //获取Channel的closeFuture，并且阻塞当前线程直到它完成
+            channelFuture.channel().closeFuture().sync();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }finally {
+            group.shutdownGracefully().sync();
+        }
     }
 }
 

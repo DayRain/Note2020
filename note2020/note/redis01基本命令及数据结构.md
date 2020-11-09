@@ -14,12 +14,34 @@ make
 
 说明书提示启动入口在src目录下
 
+
+
+```
+yum -y install centos-release-scl
+
+yum -y install devtoolset-9-gcc devtoolset-9-gcc-c++ devtoolset-9-binutils
+
+scl enable devtoolset-9 bash
+
+wget http://mirror.centos.org/centos/7/os/x86_64/Packages/tcl-8.5.13-8.el7.x86_64.rpm
+
+rpm -ivh tcl-8.5.13-8.el7.x86_64.rpm
+```
+
+
+
 ## 2、配置后台运行
 
 redis默认不是后台运行，需要配置conf中的
 
 ```
 daemonize yes
+
+
+
+#设置密码
+# requirepass foobared
+
 ```
 
 ## 3、启动

@@ -306,3 +306,75 @@ set-ExecutionPolicy RemoteSigned
 npm run server
 ```
 
+# 五、安装nvm
+
+## 1、下载安装包
+
+选择 nvm-setup.zip点击下载
+
+```
+https://github.com/coreybutler/nvm-windows/releases
+```
+
+## 2、设置镜像
+
+在安装路径下找到settings.txt
+
+设置
+
+```
+node_mirror: https://npm.taobao.org/mirrors/node/ 
+npm_mirror: https://npm.taobao.org/mirrors/npm/
+```
+
+## 3、常用命令
+
+查看版本
+
+```
+nvm v
+```
+
+查看已安装node版本
+
+```
+nvm list
+```
+
+可以安装的部分版本
+
+```
+nvm list available
+```
+
+安装指定版本
+
+```
+nvm install 版本号
+```
+
+切换版本
+
+```
+#安装完成后，可以切换版本
+nvm use 10.23.0
+```
+
+
+
+因为在配置文件中已经写上了镜像路径
+
+```
+所以就不需要手动设置npm的镜像了，可以验证
+C:\Users\13760>npm config get registry
+https://registry.npm.taobao.org/
+```
+
+
+
+如果在vscode中使用npm无效时需要
+
+```
+管理员权限打开VSCode
+```
+

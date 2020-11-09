@@ -131,11 +131,23 @@ NIO参考链接：https://blog.csdn.net/u011381576/article/details/79876754
 
 NIO，同步非阻塞io，也被称为new io。
 
+同步非阻塞，其中的“同步”、“非阻塞”指的是不同阶段的。
+
+非阻塞是指：在“准备读”这个阶段，是非阻塞的，如果发现网卡满负荷或者坏了，立刻返回。
+
+同步是指：数据准备好了，需要阻塞读取。
+
+linux中的epoll、select epoll： 
+
+epoll：操作系统会主动通知
+
+select，poll：轮询
+
+
+
 NIO的相关类都被放在java.nio包及子包下，并且对原java.io中的很多类进行改写。
 
-NIO的三大核心部分：Channel（通道）、Buffer（缓冲区）、
-
-Selector（选择器）。
+NIO的三大核心部分：Channel（通道）、Buffer（缓冲区）、Selector（选择器）。
 
 NIO是面向缓冲区，或者面向块编程的。数据读取到一个它稍后处理的缓冲区，需要时可以在缓冲区中前后移动，这就增加了处理过程中的灵活性，使用它可以提供非阻塞式的高伸缩性网络。
 
@@ -163,6 +175,47 @@ Buffer类中几个变量的含义
 
 
 ### 2.2 简单Demo
+
+
+
+```
+
+public class NioTest {
+
+    public static void main(String[] args) {
+        RandomAccessFile accessFile = null;
+        try{
+            accessFile = new RandomAccessFile("hello.txt", "rw");
+            FileChannel fileChannel = accessFile.getChannel();
+            ByteBuffer buffer = ByteBuffer.allocate(1024);
+
+            int bytesRead = -1;
+            while ((bytesRead = fileChannel.read(buffer)) != -1) {
+            //position置为0， limit置为position之前的位置
+                buffer.flip();
+                while (buffer.hasRemaining()) {
+                    //这里的get()方法，会让指针向后移一个，类似于迭代器的.next
+                    System.out.print((char)buffer.get());
+                }
+                //compact（）是将未读完的数据放到缓冲区的前面，但是position会在其末尾的下一个位置，向里面写东西的时候，不会覆盖
+                buffer.compact();
+            }
+        }catch(Exception e){
+           e.printStackTrace();
+        }finally{
+            try {
+                assert accessFile != null;
+                accessFile.close();
+            } catch (IOException ioException) {
+                ioException.printStackTrace();
+            }
+        }
+    }
+}
+
+```
+
+
 
 ```
 public class BasicBuffer {
@@ -864,5 +917,166 @@ public class GroupChatClient {
     }
 }
 
+```
+
+# 四、补充
+
+## 1、ByteBuffer的两种模式
+
+ByteBuffer有两种模式，间接模式（HeapByteBuffer）、直接模式（MappedByteBuffer）
+
+HeapByteBuffer、MappedByteBuffer其实是ByteBuffer的两种实现方式
+
+```
+HeapByteBuffer，堆内存操作，但毕竟对内存有限，如果文件容量特别大的话，只能用直接模式。
+MappedByteBuffer，可以把文件映射到虚拟内存。效率相对较低，且MappedByteBuffer有资源释放的问题，它打开的文件只有在垃圾回收的时候在会被关闭。
+
+DirectByteBuffer 一般来说可以减少一次系统空间到用户空间的拷贝。
+```
+
+## 2、NIO的服务器和客户端demo
+
+### 2.1 服务器
+
+```
+public class ServerConnect {
+    private static final int BUF_SIZE = 1024;
+    private static final int PORT = 8888;
+    private static final int TIME_OUT = 1000;
+
+    public static void main(String[] args) {
+        selector();
+    }
+
+    public static void handleAccept(SelectionKey key) throws IOException {
+        ServerSocketChannel ssChannel = (ServerSocketChannel) key.channel();
+        SocketChannel sc = ssChannel.accept();
+        sc.configureBlocking(false);
+        sc.register(key.selector(), SelectionKey.OP_READ, ByteBuffer.allocateDirect(BUF_SIZE));
+    }
+
+    public static void handleRead(SelectionKey key) throws IOException {
+        SocketChannel sc = (SocketChannel) key.channel();
+        ByteBuffer buf = (ByteBuffer) key.attachment();
+        long bytesRead = sc.read(buf);
+        while (bytesRead > 0) {
+            buf.flip();
+            while (buf.hasRemaining()) {
+                System.out.print((char) buf.get());
+            }
+            System.out.println();
+            buf.clear();
+            bytesRead = sc.read(buf);
+        }
+        if (bytesRead == -1) {
+            sc.close();
+        }
+    }
+
+    public static void handleWrite(SelectionKey key) throws IOException {
+        ByteBuffer buf = (ByteBuffer) key.attachment();
+        buf.flip();
+        SocketChannel sc = (SocketChannel) key.channel();
+        while (buf.hasRemaining()) {
+            sc.write(buf);
+        }
+        buf.compact();
+    }
+
+    public static void selector() {
+        Selector selector = null;
+        ServerSocketChannel ssc = null;
+        try {
+            selector = Selector.open();
+            ssc = ServerSocketChannel.open();
+            ssc.socket().bind(new InetSocketAddress(PORT));
+            ssc.configureBlocking(false);
+            //selector对channel的什么事件比较感兴趣
+            ssc.register(selector, SelectionKey.OP_ACCEPT);
+            while (true) {
+                if (selector.select(TIME_OUT) == 0) {
+                    System.out.println("==");
+                    continue;
+                }
+                Iterator<SelectionKey> iterator = selector.selectedKeys().iterator();
+                while (iterator.hasNext()) {
+                    SelectionKey key = iterator.next();
+                    if (key.isAcceptable()) {
+                        handleAccept(key);
+                    }
+                    if (key.isReadable()) {
+                        handleRead(key);
+                    }
+                    if (key.isWritable() && key.isValid()) {
+                        handleWrite(key);
+                    }
+                    if (key.isConnectable()) {
+                        System.out.println("isConnectable = true");
+                    }
+                    iterator.remove();
+                }
+            }
+        } catch (IOException ioException) {
+            ioException.printStackTrace();
+        } finally {
+            try {
+                if (selector != null) {
+                    selector.close();
+                }
+                if (ssc != null) {
+                    ssc.close();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
+
+
+
+
+```
+
+### 2.2 客户端
+
+```
+public class NIOClient {
+
+    public static void main(String[]args){
+        ByteBuffer buffer = ByteBuffer.allocate(1024);
+        SocketChannel socketChannel = null;
+        try{
+            socketChannel = SocketChannel.open();
+            //指的是io的不阻塞
+            socketChannel.configureBlocking(false);
+            socketChannel.connect(new InetSocketAddress("192.168.1.207", 8888));
+            if(socketChannel.finishConnect()){
+                int i = 0;
+                while (true) {
+                    TimeUnit.SECONDS.sleep(1);
+                    String info = "I'm information from client " + i++;
+                    buffer.clear();
+                    buffer.put(info.getBytes());
+                    buffer.flip();
+                    while (buffer.hasRemaining()){
+                        System.out.println(buffer);
+                        socketChannel.write(buffer);
+                    }
+                }
+            }
+        }catch(Exception e){
+           e.printStackTrace();
+        }finally{
+            try {
+                if(socketChannel != null){
+                    socketChannel.close();
+                }
+            } catch (IOException ioException) {
+                ioException.printStackTrace();
+            }
+        }
+    }
+}
 ```
 
