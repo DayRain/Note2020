@@ -269,7 +269,7 @@ docker logs -tf d8b6b342814e
 docker logs -tf d8b6b342814e --tail 10
 ```
 
-2.2.6 查看容器中的进程信息
+### 2.2.6 查看容器中的进程信息
 
 要求：该容器必须正在运行
 
@@ -277,13 +277,13 @@ docker logs -tf d8b6b342814e --tail 10
 docker top d8b6b342814e
 ```
 
-2.2.7查看容器中的元数据
+### 2.2.7查看容器中的元数据
 
 ```
 docker inspect d8b6b342814e
 ```
 
-### 2.2.6 进入当前正在运行的容器
+### 2.2.8 进入当前正在运行的容器
 
 方式一：
 
@@ -303,16 +303,28 @@ docker attach d8b6b342814e
 
 方式二 接着正在执行任务的那个终端
 
-### 2.2.7 将容器内的文件拷贝到容器外
+### 2.2.9 将容器内的文件拷贝到容器外
 
 ```
 docker cp d8b6b342814e:/home/hello.txt /home
 ```
 
-### 2.2.8 容器生成镜像
+### 2.2.10 容器生成镜像
 
 ```
 docker commit -a "个人信息" -m "说明" [imageId]  [新的镜像名]:v1 
+```
+
+### 2.2.11 容器间映射（--link）
+
+--link会在hosts文件加一条映射
+
+
+
+启动容器，第一个mynginx指的是进入容器后，输入mynginx就可以表示 后面一个 mynginx的ip
+
+```
+docker run -dit --link mynginx:mynginx alpine
 ```
 
 
@@ -332,6 +344,16 @@ docker pull nginx
 ```
 docker run -d --name "nginx01" -it -p 80:80 nginx
 ```
+
+查看ip的小技巧
+
+如果ifcofig命令不能用
+
+```
+cat /etc/hosts
+```
+
+
 
 ## 3.2 安装tomcat
 
